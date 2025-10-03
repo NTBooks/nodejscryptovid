@@ -1,0 +1,19 @@
+{
+  "name": "nodejscryptovid",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@noble/secp256k1": "^3.0.0",
+    "dotenv": "^17.2.3",
+    "ethers": "^5.8.0",
+    "ffmpeg-static": "^5.2.0",
+    "keccak256": "^1.0.6"
+  }
+}
