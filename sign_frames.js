@@ -164,7 +164,7 @@ const main = async () => {
         const startTimestampMs = Date.now();
         const signerAddress = wallet.address;
         const signerPublicKey = wallet._signingKey().publicKey; // uncompressed 0x04...
-        const totalSteps = 6;
+        const totalSteps = 8;
         const step = createStepRunner(totalSteps);
 
         // Banner
@@ -339,6 +339,62 @@ const main = async () => {
             } else {
                 throw new Error('Negative verification did not fail as expected');
             }
+        });
+
+        await step('Sign manifest hash and write manifest_hash.txt', async () => {
+            const manifestBuffer = await fsp.readFile(MANIFEST_PATH);
+            const manifestSha256Hex = sha256Hex(manifestBuffer);
+            const manifestHashBytes = Buffer.from(manifestSha256Hex, 'hex');
+            const manifestSignature = await wallet.signMessage(manifestHashBytes);
+            const { r: manR, s: manS, v: manV } = ethers.utils.splitSignature(manifestSignature);
+
+            console.log(`${cDim('Manifest file:')} ${path.basename(MANIFEST_PATH)}`);
+            console.log(`${cDim('Start timestamp:')} ${startTimestampMs}`);
+            console.log(`${cBold('Manifest SHA-256:')} ${manifestSha256Hex}`);
+            console.log(`${cBold('Signature:')} ${manifestSignature}`);
+            console.log(`${cDim('r:')} ${manR} ${cDim('s:')} ${manS} ${cDim('v:')} ${manV}`);
+
+            const hashTxtPath = path.join(OUTPUT_DIR, 'manifest_hash.txt');
+            const lines = [
+                path.basename(INPUT_VIDEO),
+                String(startTimestampMs),
+                manifestSha256Hex
+            ].join('\n') + '\n';
+            await fsp.writeFile(hashTxtPath, lines, 'utf8');
+            console.log(`${cDim('Wrote:')} ${hashTxtPath}`);
+        });
+
+        await step('Write verifiable MP4 copy with metadata', async () => {
+            const manifestBuffer = await fsp.readFile(MANIFEST_PATH);
+            const manifestSha256Hex = sha256Hex(manifestBuffer);
+            const verifiableDir = path.join(__dirname, 'verifiable mp4s');
+            await ensureDir(verifiableDir);
+            const outPath = path.join(verifiableDir, path.basename(INPUT_VIDEO));
+
+            const args = [
+                '-y',
+                '-hide_banner',
+                '-loglevel', 'error',
+                '-i', INPUT_VIDEO,
+                '-map_metadata', '0',
+                '-metadata', `artist=${manifestSha256Hex}`,
+                '-metadata', `album=Timestamp - ${startTimestampMs}`,
+                '-metadata', 'title=Verifiable Video',
+                '-movflags', 'use_metadata_tags',
+                '-c', 'copy',
+                outPath
+            ];
+
+            await new Promise((resolve, reject) => {
+                const child = spawn(ffmpegPath, args, { stdio: 'inherit' });
+                child.on('error', reject);
+                child.on('exit', (code) => {
+                    if (code === 0) return resolve();
+                    reject(new Error(`ffmpeg (metadata write) exited with code ${code}`));
+                });
+            });
+
+            console.log(`${cDim('Wrote verifiable MP4:')} ${outPath}`);
         });
 
         console.log(cCyan('='.repeat(60)));
